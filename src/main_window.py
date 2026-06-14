@@ -124,14 +124,29 @@ class FileCard(QFrame):
     double_clicked = pyqtSignal(object)  # FileItem
     context_menu_requested = pyqtSignal(object, object)  # FileItem, QPoint
 
-    CARD_W = 150
-    CARD_H = 160
-
     def __init__(self, file_item: FileItem, sync_folder: str,
-                 parent: Optional[QWidget] = None):
+                 size_mode: str = 'large', parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.file_item = file_item
         self.sync_folder = sync_folder
+        self.size_mode = size_mode
+
+        if size_mode == 'normal':
+            self.CARD_W = 110
+            self.CARD_H = 120
+            self.thumb_h = 64
+            self.font_size = 8
+        elif size_mode == 'huge':
+            self.CARD_W = 200
+            self.CARD_H = 210
+            self.thumb_h = 140
+            self.font_size = 10
+        else:  # large
+            self.CARD_W = 150
+            self.CARD_H = 160
+            self.thumb_h = 100
+            self.font_size = 9
+
         self.setFixedSize(self.CARD_W, self.CARD_H)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setProperty('class', 'file-card')
@@ -140,24 +155,24 @@ class FileCard(QFrame):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(2)
 
         # Миниатюра / иконка
         thumb_label = QLabel()
-        thumb_label.setFixedSize(self.CARD_W - 16, 100)
+        thumb_label.setFixedSize(self.CARD_W - 12, self.thumb_h)
         thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         pixmap = self._get_thumbnail()
         if pixmap and not pixmap.isNull():
             scaled = pixmap.scaled(
-                self.CARD_W - 16, 100,
+                self.CARD_W - 12, self.thumb_h,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             )
             thumb_label.setPixmap(scaled)
         else:
-            icon_pixmap = self._generate_icon(self.CARD_W - 16, 80)
+            icon_pixmap = self._generate_icon(self.CARD_W - 12, self.thumb_h)
             thumb_label.setPixmap(icon_pixmap)
 
         layout.addWidget(thumb_label)
@@ -167,15 +182,15 @@ class FileCard(QFrame):
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_label.setWordWrap(False)
         name_label.setToolTip(self.file_item.name)
-        name_label.setMaximumWidth(self.CARD_W - 16)
-        font = QFont('Segoe UI', 9)
+        name_label.setMaximumWidth(self.CARD_W - 12)
+        font = QFont('Segoe UI', self.font_size)
         name_label.setFont(font)
         layout.addWidget(name_label)
 
         # Иконка статуса
         status_label = QLabel(self._status_text())
         status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        status_label.setFont(QFont('Segoe UI', 7))
+        status_label.setFont(QFont('Segoe UI', max(6, self.font_size - 2)))
         status_label.setStyleSheet(f'color: {self._status_color()};')
         layout.addWidget(status_label)
 
@@ -203,8 +218,14 @@ class FileCard(QFrame):
         if self.file_item.is_dir:
             p.setBrush(QBrush(QColor('#f9e2af')))
             p.setPen(Qt.PenStyle.NoPen)
-            p.drawRoundedRect(cx - 24, cy - 14, 48, 32, 4, 4)
-            p.drawRoundedRect(cx - 24, cy - 20, 24, 10, 3, 3)
+            # Масштабируемые размеры папки относительно ширины w
+            scale = w / 134.0
+            folder_w = int(48 * scale)
+            folder_h = int(32 * scale)
+            folder_tab_w = int(24 * scale)
+            folder_tab_h = int(10 * scale)
+            p.drawRoundedRect(cx - folder_w // 2, cy - folder_h // 2, folder_w, folder_h, 4, 4)
+            p.drawRoundedRect(cx - folder_w // 2, cy - folder_h // 2 - folder_tab_h + 2, folder_tab_w, folder_tab_h, 3, 3)
         else:
             ext = os.path.splitext(self.file_item.name)[1].lower()
             color = '#89b4fa'
@@ -219,21 +240,28 @@ class FileCard(QFrame):
             elif ext in ('.zip', '.rar', '.7z', '.tar'):
                 color = '#fab387'
 
+            scale = w / 134.0
+            file_w = int(36 * scale)
+            file_h = int(44 * scale)
+            corner_size = int(10 * scale)
+
             p.setBrush(QBrush(QColor(color)))
             p.setPen(Qt.PenStyle.NoPen)
-            p.drawRoundedRect(cx - 18, cy - 22, 36, 44, 4, 4)
+            p.drawRoundedRect(cx - file_w // 2, cy - file_h // 2, file_w, file_h, 4, 4)
 
             p.setBrush(QBrush(QColor('#1e1e2e')))
-            p.drawRect(cx + 8, cy - 22, 10, 10)
+            p.drawRect(cx + file_w // 2 - corner_size, cy - file_h // 2, corner_size, corner_size)
             p.setBrush(QBrush(QColor(color).darker(120)))
-            pts = [QPoint(cx + 8, cy - 22), QPoint(cx + 18, cy - 12),
-                   QPoint(cx + 8, cy - 12)]
+            pts = [QPoint(cx + file_w // 2 - corner_size, cy - file_h // 2),
+                   QPoint(cx + file_w // 2, cy - file_h // 2 + corner_size),
+                   QPoint(cx + file_w // 2 - corner_size, cy - file_h // 2 + corner_size)]
             p.drawPolygon(pts)
 
             if ext:
                 p.setPen(QPen(QColor('#1e1e2e')))
-                p.setFont(QFont('Segoe UI', 8, QFont.Weight.Bold))
-                p.drawText(QRect(cx - 18, cy - 5, 36, 20),
+                font_sz = max(6, int(8 * scale))
+                p.setFont(QFont('Segoe UI', font_sz, QFont.Weight.Bold))
+                p.drawText(QRect(cx - file_w // 2, cy - file_h // 6, file_w, file_h // 3),
                            Qt.AlignmentFlag.AlignCenter, ext[1:].upper())
 
         p.end()
@@ -484,29 +512,28 @@ class MainWindow(QMainWindow):
             QToolButton:hover { background: #45475a; }
             QToolButton:checked { background: #89b4fa; color: #1e1e2e; border: 1px solid #89b4fa; }
         '''
-        self._view_tiles_btn = QToolButton()
-        self._view_tiles_btn.setText('▦')
-        self._view_tiles_btn.setFixedSize(28, 28)
-        self._view_tiles_btn.setCheckable(True)
-        self._view_tiles_btn.setToolTip('Плитка')
-        self._view_tiles_btn.setStyleSheet(btn_style)
-        toolbar_layout.addWidget(self._view_tiles_btn)
+        self._view_mode_btn = QToolButton()
+        self._view_mode_btn.setFixedSize(38, 28)
+        self._view_mode_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self._view_mode_btn.setToolTip('Вид')
+        self._view_mode_btn.setStyleSheet(btn_style)
 
-        self._view_list_btn = QToolButton()
-        self._view_list_btn.setText('☰')
-        self._view_list_btn.setFixedSize(28, 28)
-        self._view_list_btn.setCheckable(True)
-        self._view_list_btn.setToolTip('Список')
-        self._view_list_btn.setStyleSheet(btn_style)
-        toolbar_layout.addWidget(self._view_list_btn)
+        self._view_menu = QMenu(self._view_mode_btn)
+        self._view_menu.setStyleSheet('''
+            QMenu { background: #313244; color: #cdd6f4; border: 1px solid #45475a;
+                border-radius: 6px; padding: 4px; }
+            QMenu::item { padding: 6px 28px 6px 28px; border-radius: 4px; font-family: 'Segoe UI'; font-size: 9pt; }
+            QMenu::item:selected { background: #45475a; color: #cdd6f4; }
+            QMenu::indicator { width: 16px; height: 16px; left: 6px; }
+            QMenu::separator { height: 1px; background: #45475a; margin: 4px 8px; }
+        ''')
+        self._view_mode_btn.setMenu(self._view_menu)
 
-        if self._config.view_mode == 'list':
-            self._view_list_btn.setChecked(True)
-        else:
-            self._view_tiles_btn.setChecked(True)
+        current_mode = self._config.view_mode
+        self._view_mode_btn.setText(self._get_view_mode_icon(current_mode))
+        self._update_view_menu()
 
-        self._view_tiles_btn.clicked.connect(lambda: self._set_view_mode('tiles'))
-        self._view_list_btn.clicked.connect(lambda: self._set_view_mode('list'))
+        toolbar_layout.addWidget(self._view_mode_btn)
 
         self._toggle_sync_btn = QToolButton()
         self._toggle_sync_btn.setText('▶')
@@ -735,8 +762,15 @@ class MainWindow(QMainWindow):
             QToolButton:disabled {{ color: {text_muted}; background: {bg_mantle}; border: 1px solid {border}; }}
             QToolButton:checked {{ background: {accent}; color: {bg_base}; border: 1px solid {accent}; }}
         '''
-        self._view_tiles_btn.setStyleSheet(btn_style)
-        self._view_list_btn.setStyleSheet(btn_style)
+        self._view_mode_btn.setStyleSheet(btn_style)
+        self._view_menu.setStyleSheet(f'''
+            QMenu {{ background: {bg_surface0}; color: {text}; border: 1px solid {border};
+                border-radius: 6px; padding: 4px; }}
+            QMenu::item {{ padding: 6px 28px 6px 28px; border-radius: 4px; font-family: 'Segoe UI'; font-size: 9pt; }}
+            QMenu::item:selected {{ background: {bg_surface1}; color: {text}; }}
+            QMenu::indicator {{ width: 16px; height: 16px; left: 6px; }}
+            QMenu::separator {{ height: 1px; background: {border}; margin: 4px 8px; }}
+        ''')
         self._back_btn.setStyleSheet(btn_style)
         self._forward_btn.setStyleSheet(btn_style)
 
@@ -1120,8 +1154,15 @@ class MainWindow(QMainWindow):
             old.deleteLater()
         container = QWidget()
         layout = FlowLayout(container, 12, 10, 10)
+
+        tile_size = 'large'
+        if self._config.view_mode == 'tiles_normal':
+            tile_size = 'normal'
+        elif self._config.view_mode == 'tiles_huge':
+            tile_size = 'huge'
+
         for fi in items:
-            card = FileCard(fi, self._config.sync_folder)
+            card = FileCard(fi, self._config.sync_folder, size_mode=tile_size)
             card.double_clicked.connect(self._on_file_activated)
             card.context_menu_requested.connect(self._on_card_context_menu)
             layout.addWidget(card)
@@ -1354,7 +1395,7 @@ class MainWindow(QMainWindow):
 
     def _on_search(self, text: str) -> None:
         t = text.lower()
-        if self._config.view_mode == 'tiles':
+        if self._config.view_mode.startswith('tiles'):
             for card in self._file_cards:
                 card.setVisible(t in card.file_item.name.lower())
         else:
@@ -1367,12 +1408,46 @@ class MainWindow(QMainWindow):
         self._config.save()
         self._load_files()
 
+    def _get_view_mode_icon(self, mode: str) -> str:
+        mapping = {
+            'list': '☰ ▾',
+            'tiles_normal': '▤ ▾',
+            'tiles_large': '▦ ▾',
+            'tiles_huge': '▰ ▾',
+        }
+        return mapping.get(mode, '▦ ▾')
+
+    def _update_view_menu(self) -> None:
+        if not hasattr(self, '_view_menu'):
+            return
+        self._view_menu.clear()
+        from PyQt6.QtGui import QActionGroup
+        group = QActionGroup(self)
+
+        modes = [
+            ('list', 'Таблица'),
+            ('tiles_normal', 'Обычные значки'),
+            ('tiles_large', 'Крупные значки'),
+            ('tiles_huge', 'Огромные значки')
+        ]
+
+        current_mode = self._config.view_mode
+        for mode_id, label in modes:
+            action = self._view_menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(mode_id == current_mode)
+            action.setActionGroup(group)
+            action.triggered.connect(lambda checked, m=mode_id: self._set_view_mode(m))
+
     def _set_view_mode(self, mode: str) -> None:
         self._config.view_mode = mode
         self._config.save()
-        self._view_tiles_btn.setChecked(mode == 'tiles')
-        self._view_list_btn.setChecked(mode == 'list')
-        self._tiles_scroll.setVisible(mode == 'tiles')
+
+        if hasattr(self, '_view_mode_btn'):
+            self._view_mode_btn.setText(self._get_view_mode_icon(mode))
+            self._update_view_menu()
+
+        self._tiles_scroll.setVisible(mode.startswith('tiles'))
         self._table.setVisible(mode == 'list')
         self._load_files()
 

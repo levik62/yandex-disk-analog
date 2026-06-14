@@ -32,7 +32,7 @@ A desktop synchronization client for Google Drive featuring a premium, user-frie
 
 3. Run the application:
    ```bash
-   python src/main.pyw
+   python main.pyw
    ```
 
 ---

@@ -61,7 +61,7 @@ class Config:
         'last_user_name': '',
         'last_user_email': '',
         'window_geometry': b'',
-        'view_mode': 'tiles',
+        'view_mode': 'tiles_large',
         'sort_by': 'name',
         'sort_order': 'asc',
         'selective_sync_folders': [],
@@ -238,13 +238,18 @@ class Config:
 
     @property
     def view_mode(self) -> str:
-        """Режим отображения ('tiles' | 'list')."""
-        return self._data.get('view_mode', self.DEFAULTS['view_mode'])
+        """Режим отображения ('list' | 'tiles_normal' | 'tiles_large' | 'tiles_huge')."""
+        val = self._data.get('view_mode', 'tiles_large')
+        if val == 'tiles':
+            val = 'tiles_large'
+        return val
 
     @view_mode.setter
     def view_mode(self, value: str) -> None:
-        if value not in ('tiles', 'list'):
-            value = 'tiles'
+        if value not in ('list', 'tiles_normal', 'tiles_large', 'tiles_huge', 'tiles'):
+            value = 'tiles_large'
+        if value == 'tiles':
+            value = 'tiles_large'
         self._data['view_mode'] = value
 
     @property

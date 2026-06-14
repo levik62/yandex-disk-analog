@@ -161,6 +161,16 @@ class DriveAPI(QObject):
         except HttpError as e:
             error_msg = f"Ошибка Google Drive API при создании корневой папки: {e}"
             logger.error(error_msg)
+
+            # Проверяем на недостаточные права доступа (403 Forbidden)
+            if e.resp.status == 403 or "insufficient" in str(e).lower():
+                logger.warning("Обнаружена ошибка 403 (недостаточно прав доступа). Сбрасываем авторизацию...")
+                try:
+                    self._auth_manager.logout()
+                except Exception as auth_err:
+                    logger.error("Не удалось удалить недействительный токен: %s", auth_err)
+                error_msg = "Ошибка прав доступа (403). Токен сброшен. Пожалуйста, выйдите из аккаунта и войдите заново (или перезапустите приложение), чтобы предоставить полные права на работу с Google Drive."
+
             self.api_error.emit(error_msg)
             raise RuntimeError(error_msg) from e
 

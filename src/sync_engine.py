@@ -459,6 +459,24 @@ class SyncEngine(QObject):
         self._paused = False
         self._set_status("syncing")
 
+        # Убедиться, что локальная папка синхронизации существует
+        sync_folder = self._config.sync_folder
+        if not os.path.exists(sync_folder):
+            try:
+                os.makedirs(sync_folder, exist_ok=True)
+                logger.info("Создана локальная папка синхронизации: %s", sync_folder)
+            except Exception as e:
+                logger.error("Не удалось создать локальную папку синхронизации: %s", e)
+
+        # Убедиться, что локальная папка Скриншоты существует
+        screenshots_folder = os.path.join(sync_folder, "Скриншоты")
+        if not os.path.exists(screenshots_folder):
+            try:
+                os.makedirs(screenshots_folder, exist_ok=True)
+                logger.info("Создана локальная папка для скриншотов: %s", screenshots_folder)
+            except Exception as e:
+                logger.error("Не удалось создать локальную папку для скриншотов: %s", e)
+
         try:
             # Убедиться, что корневая папка в Drive существует
             self._root_folder_id = self._api.ensure_sync_folder()

@@ -1609,7 +1609,7 @@ class MainWindow(QMainWindow):
         })
 
         # Обновить кнопку старт/пауза
-        if status in ('paused', 'offline'):
+        if status in ('paused', 'offline', 'error'):
             self._toggle_sync_btn.setText('▶')
             self._toggle_sync_btn.setToolTip('Запустить автосинхронизацию')
             self._toggle_sync_btn.setStyleSheet(f'''

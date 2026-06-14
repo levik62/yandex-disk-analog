@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Application databases and logs
+*.db
+*.log
+*.xml
+sync_state.db
+app.log
+settings.xml
+
+# Credentials and secrets
+credentials.json
+token.json
+client_secrets.json
+.env
+.env.*
+
+# Temporary files
+.tempmediaStorage/
+.system_generated/
+temp/
+tmp/
+
+# Ignore all markdown files except README.md
+*.md
+!README.md

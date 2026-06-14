@@ -42,3 +42,8 @@ tmp/
 # Ignore all markdown files except README.md
 *.md
 !README.md
+
+# PyInstaller build outputs
+build/
+dist/
+*.spec

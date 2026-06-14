@@ -474,6 +474,30 @@ class MainWindow(QMainWindow):
         self._forward_btn.setEnabled(False)
         toolbar_layout.addWidget(self._forward_btn)
 
+        # Кнопка-шестеренка с меню операций
+        self._menu_btn = QToolButton()
+        self._menu_btn.setText('⚙ ▾')
+        self._menu_btn.setFixedSize(38, 28)
+        self._menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self._menu_btn.setToolTip('Меню')
+        self._menu_btn.setStyleSheet('''
+            QToolButton { background: #313244; color: #cdd6f4; border: 1px solid #45475a;
+                border-radius: 6px; font-size: 14px; }
+            QToolButton:hover { background: #45475a; }
+        ''')
+        self._ops_menu = QMenu(self._menu_btn)
+        self._ops_menu.setStyleSheet('''
+            QMenu { background: #313244; color: #cdd6f4; border: 1px solid #45475a;
+                border-radius: 6px; padding: 4px; }
+            QMenu::item { padding: 6px 28px 6px 28px; border-radius: 4px; font-family: 'Segoe UI'; font-size: 9pt; }
+            QMenu::item:selected { background: #45475a; color: #cdd6f4; }
+            QMenu::indicator { width: 16px; height: 16px; left: 6px; }
+            QMenu::separator { height: 1px; background: #45475a; margin: 4px 8px; }
+        ''')
+        self._menu_btn.setMenu(self._ops_menu)
+        self._update_ops_menu()
+        toolbar_layout.addWidget(self._menu_btn)
+
         self._breadcrumb_container = QHBoxLayout()
         self._breadcrumb_container.setSpacing(4)
         toolbar_layout.addLayout(self._breadcrumb_container)
@@ -490,21 +514,6 @@ class MainWindow(QMainWindow):
         ''')
         self._search_input.textChanged.connect(self._on_search)
         toolbar_layout.addWidget(self._search_input)
-
-        self._sort_combo = QComboBox()
-        self._sort_combo.addItems(['По имени', 'По дате', 'По размеру'])
-        self._sort_combo.setFixedHeight(28)
-        self._sort_combo.setStyleSheet('''
-            QComboBox { background: #313244; color: #cdd6f4; border: 1px solid #45475a;
-                border-radius: 6px; padding: 0 8px; font-family: 'Segoe UI'; font-size: 9pt; min-width: 100px; }
-            QComboBox::drop-down { border: none; width: 20px; }
-            QComboBox QAbstractItemView { background: #313244; color: #cdd6f4;
-                selection-background-color: #45475a; border: 1px solid #585b70; }
-        ''')
-        sort_map = {'name': 0, 'date': 1, 'size': 2}
-        self._sort_combo.setCurrentIndex(sort_map.get(self._config.sort_by, 0))
-        self._sort_combo.currentIndexChanged.connect(self._on_sort_changed)
-        toolbar_layout.addWidget(self._sort_combo)
 
         btn_style = '''
             QToolButton { background: #313244; color: #cdd6f4; border: 1px solid #45475a;
@@ -747,14 +756,6 @@ class MainWindow(QMainWindow):
                 border-radius: 14px; padding: 0 12px; font-family: 'Segoe UI'; font-size: 9pt; }}
             QLineEdit:focus {{ border: 1px solid {accent}; }}
         ''')
-        self._sort_combo.setStyleSheet(f'''
-            QComboBox {{ background: {bg_surface0}; color: {text}; border: 1px solid {border};
-                border-radius: 6px; padding: 0 8px; font-family: 'Segoe UI'; font-size: 9pt; min-width: 100px; }}
-            QComboBox::drop-down {{ border: none; width: 20px; }}
-            QComboBox QAbstractItemView {{ background: {bg_surface0}; color: {text};
-                selection-background-color: {bg_surface1}; border: 1px solid {bg_surface2}; }}
-        ''')
-
         btn_style = f'''
             QToolButton {{ background: {bg_surface0}; color: {text}; border: 1px solid {border};
                 border-radius: 6px; font-size: 14px; }}
@@ -763,14 +764,17 @@ class MainWindow(QMainWindow):
             QToolButton:checked {{ background: {accent}; color: {bg_base}; border: 1px solid {accent}; }}
         '''
         self._view_mode_btn.setStyleSheet(btn_style)
-        self._view_menu.setStyleSheet(f'''
+        self._menu_btn.setStyleSheet(btn_style)
+        menu_style = f'''
             QMenu {{ background: {bg_surface0}; color: {text}; border: 1px solid {border};
                 border-radius: 6px; padding: 4px; }}
             QMenu::item {{ padding: 6px 28px 6px 28px; border-radius: 4px; font-family: 'Segoe UI'; font-size: 9pt; }}
             QMenu::item:selected {{ background: {bg_surface1}; color: {text}; }}
             QMenu::indicator {{ width: 16px; height: 16px; left: 6px; }}
             QMenu::separator {{ height: 1px; background: {border}; margin: 4px 8px; }}
-        ''')
+        '''
+        self._view_menu.setStyleSheet(menu_style)
+        self._ops_menu.setStyleSheet(menu_style)
         self._back_btn.setStyleSheet(btn_style)
         self._forward_btn.setStyleSheet(btn_style)
 
@@ -1136,15 +1140,21 @@ class MainWindow(QMainWindow):
     def _sort_items(self, items: List[FileItem]) -> List[FileItem]:
         dirs = [i for i in items if i.is_dir]
         files = [i for i in items if not i.is_dir]
-        key_map = {
-            'name': lambda x: x.name.lower(),
-            'date': lambda x: x.modified or datetime.min,
-            'size': lambda x: x.size,
-        }
-        key_fn = key_map.get(self._config.sort_by, key_map['name'])
-        rev = self._config.sort_order == 'desc'
-        dirs.sort(key=lambda x: x.name.lower(), reverse=rev)
-        files.sort(key=key_fn, reverse=rev)
+
+        sort_by = self._config.sort_by
+        if sort_by == 'date':
+            rev = (self._config.sort_order != 'asc')
+            dirs.sort(key=lambda x: x.modified or datetime.min, reverse=rev)
+            files.sort(key=lambda x: x.modified or datetime.min, reverse=rev)
+        elif sort_by == 'size':
+            rev = (self._config.sort_order == 'desc')
+            dirs.sort(key=lambda x: x.name.lower(), reverse=rev)
+            files.sort(key=lambda x: x.size, reverse=rev)
+        else:  # name
+            rev = (self._config.sort_order == 'desc')
+            dirs.sort(key=lambda x: x.name.lower(), reverse=rev)
+            files.sort(key=lambda x: x.name.lower(), reverse=rev)
+
         return dirs + files
 
     def _populate_tiles(self, items: List[FileItem]) -> None:
@@ -1447,9 +1457,114 @@ class MainWindow(QMainWindow):
             self._view_mode_btn.setText(self._get_view_mode_icon(mode))
             self._update_view_menu()
 
+        if hasattr(self, '_ops_menu'):
+            self._update_ops_menu()
+
         self._tiles_scroll.setVisible(mode.startswith('tiles'))
         self._table.setVisible(mode == 'list')
         self._load_files()
+
+    def _update_ops_menu(self) -> None:
+        if not hasattr(self, '_ops_menu'):
+            return
+        self._ops_menu.clear()
+        from PyQt6.QtGui import QActionGroup
+        view_group = QActionGroup(self)
+
+        modes = [
+            ('list', 'Таблица'),
+            ('tiles_normal', 'Обычные значки'),
+            ('tiles_large', 'Крупные значки'),
+            ('tiles_huge', 'Огромные значки')
+        ]
+        current_mode = self._config.view_mode
+        for mode_id, label in modes:
+            act = self._ops_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(mode_id == current_mode)
+            act.setActionGroup(view_group)
+            act.triggered.connect(lambda checked, m=mode_id: self._set_view_mode(m))
+
+        self._ops_menu.addSeparator()
+
+        sort_menu = self._ops_menu.addMenu('Сортировать')
+        sort_group = QActionGroup(self)
+
+        sorts = [
+            ('name', 'По имени'),
+            ('date', 'По дате'),
+            ('size', 'По размеру')
+        ]
+        current_sort = self._config.sort_by
+        for sort_id, label in sorts:
+            act = sort_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(sort_id == current_sort)
+            act.setActionGroup(sort_group)
+            act.triggered.connect(lambda checked, s=sort_id: self._set_sort_field(s))
+
+        sort_menu.addSeparator()
+
+        order_group = QActionGroup(self)
+        order_asc = sort_menu.addAction('По возрастанию')
+        order_asc.setCheckable(True)
+        order_asc.setChecked(self._config.sort_order == 'asc')
+        order_asc.setActionGroup(order_group)
+        order_asc.triggered.connect(lambda: self._set_sort_order('asc'))
+
+        order_desc = sort_menu.addAction('По убыванию')
+        order_desc.setCheckable(True)
+        order_desc.setChecked(self._config.sort_order == 'desc')
+        order_desc.setActionGroup(order_group)
+        order_desc.triggered.connect(lambda: self._set_sort_order('desc'))
+
+        self._ops_menu.addSeparator()
+        self._ops_menu.addAction('Загрузить в папку...').triggered.connect(self._upload_file)
+        self._ops_menu.addAction('Обновить').triggered.connect(self.refresh)
+        self._ops_menu.addSeparator()
+        self._ops_menu.addAction('Создать папку').triggered.connect(self._create_folder)
+
+    def _set_sort_field(self, field: str) -> None:
+        self._config.sort_by = field
+        if field == 'date':
+            self._config.sort_order = 'desc'
+        else:
+            self._config.sort_order = 'asc'
+        self._config.save()
+        self._load_files()
+        self._update_ops_menu()
+
+    def _set_sort_order(self, order: str) -> None:
+        self._config.sort_order = order
+        self._config.save()
+        self._load_files()
+        self._update_ops_menu()
+
+    def _create_folder(self) -> None:
+        from PyQt6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, 'Новая папка', 'Название папки:')
+        if ok and name:
+            current_abs = os.path.join(self._config.sync_folder, self._current_path)
+            new_dir = os.path.join(current_abs, name)
+            try:
+                os.makedirs(new_dir, exist_ok=True)
+                self.refresh()
+            except OSError as e:
+                QMessageBox.warning(self, 'Ошибка', f'Не удалось создать папку: {e}')
+
+    def _upload_file(self) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+        import shutil
+        filepath, _ = QFileDialog.getOpenFileName(self, 'Выбрать файл для загрузки')
+        if filepath:
+            filename = os.path.basename(filepath)
+            current_abs = os.path.join(self._config.sync_folder, self._current_path)
+            dest = os.path.join(current_abs, filename)
+            try:
+                shutil.copy2(filepath, dest)
+                self.refresh()
+            except Exception as e:
+                QMessageBox.warning(self, 'Ошибка', f'Не удалось скопировать файл: {e}')
 
     def _on_sync_now(self) -> None:
         try:

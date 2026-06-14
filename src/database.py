@@ -9,6 +9,7 @@ SQLite база данных для хранения состояния синх
 import os
 import sqlite3
 import logging
+import threading
 from datetime import datetime
 from typing import Dict, List, Optional
 from contextlib import contextmanager
@@ -41,6 +42,7 @@ class Database:
         """
         self._db_path = db_path or DEFAULT_DB_PATH
         self._ensure_directory()
+        self._lock = threading.Lock()
         self._conn = sqlite3.connect(
             self._db_path,
             check_same_thread=False,
@@ -116,13 +118,14 @@ class Database:
         Yields:
             sqlite3.Cursor: Курсор для выполнения запросов.
         """
-        cursor = self._conn.cursor()
-        try:
-            yield cursor
-            self._conn.commit()
-        except Exception:
-            self._conn.rollback()
-            raise
+        with self._lock:
+            cursor = self._conn.cursor()
+            try:
+                yield cursor
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
 
     # ========== Операции с файлами ==========
 
@@ -136,12 +139,13 @@ class Database:
         Returns:
             FileItem или None, если файл не найден.
         """
-        cursor = self._conn.cursor()
-        cursor.execute("SELECT * FROM files WHERE path = ?", (path,))
-        row = cursor.fetchone()
-        if row is None:
-            return None
-        return self._row_to_file_item(row)
+        with self._lock:
+            cursor = self._conn.cursor()
+            cursor.execute("SELECT * FROM files WHERE path = ?", (path,))
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return self._row_to_file_item(row)
 
     def upsert_file(self, item: FileItem) -> None:
         """
@@ -202,9 +206,10 @@ class Database:
         Returns:
             Список объектов FileItem.
         """
-        cursor = self._conn.cursor()
-        cursor.execute("SELECT * FROM files ORDER BY path")
-        return [self._row_to_file_item(row) for row in cursor.fetchall()]
+        with self._lock:
+            cursor = self._conn.cursor()
+            cursor.execute("SELECT * FROM files ORDER BY path")
+            return [self._row_to_file_item(row) for row in cursor.fetchall()]
 
     def get_files_by_status(self, status: SyncStatus) -> List[FileItem]:
         """
@@ -216,12 +221,13 @@ class Database:
         Returns:
             Список объектов FileItem с указанным статусом.
         """
-        cursor = self._conn.cursor()
-        cursor.execute(
-            "SELECT * FROM files WHERE sync_status = ? ORDER BY path",
-            (status.name,),
-        )
-        return [self._row_to_file_item(row) for row in cursor.fetchall()]
+        with self._lock:
+            cursor = self._conn.cursor()
+            cursor.execute(
+                "SELECT * FROM files WHERE sync_status = ? ORDER BY path",
+                (status.name,),
+            )
+            return [self._row_to_file_item(row) for row in cursor.fetchall()]
 
     def get_files_in_folder(self, folder_path: str) -> List[FileItem]:
         """
@@ -233,35 +239,36 @@ class Database:
         Returns:
             Список объектов FileItem в папке.
         """
-        cursor = self._conn.cursor()
-        if not folder_path or folder_path == '':
-            # Корневой уровень: файлы без разделителей в пути
-            # или с одним сегментом
-            cursor.execute("SELECT * FROM files ORDER BY is_dir DESC, path")
-            all_rows = cursor.fetchall()
-            result = []
-            for row in all_rows:
-                path = row['path']
-                # Файл в корне = не содержит разделителей в пути
-                normalized = path.replace('\\', '/')
-                if '/' not in normalized:
-                    result.append(self._row_to_file_item(row))
-            return result
-        else:
-            # Файлы, путь которых начинается с folder_path/ и не содержит
-            # дополнительных разделителей после folder_path/
-            prefix = folder_path.replace('\\', '/').rstrip('/') + '/'
-            cursor.execute(
-                "SELECT * FROM files WHERE path LIKE ? ORDER BY is_dir DESC, path",
-                (prefix + '%',),
-            )
-            result = []
-            for row in cursor.fetchall():
-                path = row['path'].replace('\\', '/')
-                remainder = path[len(prefix):]
-                if '/' not in remainder:
-                    result.append(self._row_to_file_item(row))
-            return result
+        with self._lock:
+            cursor = self._conn.cursor()
+            if not folder_path or folder_path == '':
+                # Корневой уровень: файлы без разделителей в пути
+                # или с одним сегментом
+                cursor.execute("SELECT * FROM files ORDER BY is_dir DESC, path")
+                all_rows = cursor.fetchall()
+                result = []
+                for row in all_rows:
+                    path = row['path']
+                    # Файл в корне = не содержит разделителей в пути
+                    normalized = path.replace('\\', '/')
+                    if '/' not in normalized:
+                        result.append(self._row_to_file_item(row))
+                return result
+            else:
+                # Файлы, путь которых начинается с folder_path/ и не содержит
+                # дополнительных разделителей после folder_path/
+                prefix = folder_path.replace('\\', '/').rstrip('/') + '/'
+                cursor.execute(
+                    "SELECT * FROM files WHERE path LIKE ? ORDER BY is_dir DESC, path",
+                    (prefix + '%',),
+                )
+                result = []
+                for row in cursor.fetchall():
+                    path = row['path'].replace('\\', '/')
+                    remainder = path[len(prefix):]
+                    if '/' not in remainder:
+                        result.append(self._row_to_file_item(row))
+                return result
 
     # ========== Лог операций ==========
 
@@ -305,23 +312,24 @@ class Database:
         Returns:
             Список словарей с данными операций.
         """
-        cursor = self._conn.cursor()
-        cursor.execute(
-            "SELECT * FROM sync_log ORDER BY timestamp DESC LIMIT ?",
-            (limit,),
-        )
-        rows = cursor.fetchall()
-        result = []
-        for row in rows:
-            result.append({
-                'id': row['id'],
-                'timestamp': row['timestamp'],
-                'op_type': row['op_type'],
-                'file_path': row['file_path'],
-                'status': row['status'],
-                'error_message': row['error_message'],
-            })
-        return result
+        with self._lock:
+            cursor = self._conn.cursor()
+            cursor.execute(
+                "SELECT * FROM sync_log ORDER BY timestamp DESC LIMIT ?",
+                (limit,),
+            )
+            rows = cursor.fetchall()
+            result = []
+            for row in rows:
+                result.append({
+                    'id': row['id'],
+                    'timestamp': row['timestamp'],
+                    'op_type': row['op_type'],
+                    'file_path': row['file_path'],
+                    'status': row['status'],
+                    'error_message': row['error_message'],
+                })
+            return result
 
     # ========== Токен изменений ==========
 
@@ -332,10 +340,11 @@ class Database:
         Returns:
             Строка токена или None, если токен не сохранён.
         """
-        cursor = self._conn.cursor()
-        cursor.execute("SELECT token FROM change_token WHERE id = 1")
-        row = cursor.fetchone()
-        return row['token'] if row else None
+        with self._lock:
+            cursor = self._conn.cursor()
+            cursor.execute("SELECT token FROM change_token WHERE id = 1")
+            row = cursor.fetchone()
+            return row['token'] if row else None
 
     def set_change_token(self, token: str) -> None:
         """

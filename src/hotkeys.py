@@ -227,7 +227,7 @@ class _HotkeyListenerThread(QThread):
             if result:
                 self._registered_ids.append(hotkey_id)
                 logger.info(
-                    "Горячая клавиша зарегистрирована: %s → %s (id=%d, mod=0x%X, vk=0x%X)",
+                    "Горячая клавиша зарегистрирована: %s -> %s (id=%d, mod=0x%X, vk=0x%X)",
                     action, hotkey_str, hotkey_id, modifiers, vk_code,
                 )
             else:

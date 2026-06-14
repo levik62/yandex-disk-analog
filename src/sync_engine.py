@@ -233,7 +233,7 @@ class _DebouncedHandler(FileSystemEventHandler):
         dest = event.dest_path
         if self._should_ignore(src) and self._should_ignore(dest):
             return
-        logger.info("Перемещён: %s → %s", src, dest)
+        logger.info("Перемещён: %s -> %s", src, dest)
         rel_src = self._engine._relative_path(src)
         rel_dest = self._engine._relative_path(dest)
         # Если перемещение за пределы папки синхронизации — удаление
@@ -348,7 +348,7 @@ class ConflictResolver:
 
         if p.exists():
             shutil.copy2(str(p), str(conflict_path))
-            logger.info("Конфликтная копия: %s → %s", file_path, conflict_path)
+            logger.info("Конфликтная копия: %s -> %s", file_path, conflict_path)
 
         return str(conflict_path)
 
@@ -1066,7 +1066,7 @@ class SyncEngine(QObject):
 
         op.progress = 100.0
         self.file_synced.emit(rel_path)
-        logger.info("Загружен: %s → %s", rel_path, cloud_id)
+        logger.info("Загружен: %s -> %s", rel_path, cloud_id)
 
     # -- Download --
 
@@ -1183,7 +1183,7 @@ class SyncEngine(QObject):
             self._do_upload(upload_op, new_rel_path, new_abs_path)
 
         op.progress = 100.0
-        logger.info("Переименование: %s → %s", old_rel_path, new_rel_path)
+        logger.info("Переименование: %s -> %s", old_rel_path, new_rel_path)
 
     # ====================================================================
     #  Обработка завершения операций

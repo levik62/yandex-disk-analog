@@ -469,7 +469,7 @@ class SyncEngine(QObject):
                 logger.error("Не удалось создать локальную папку синхронизации: %s", e)
 
         # Создаём стандартные папки Яндекс.Диска (кроме Заметок и Телемоста)
-        yandex_default_folders = ["Документы", "Загрузки", "Музыка", "картинки", "Фотокамера", "Скриншоты"]
+        yandex_default_folders = ["Документы", "Загрузки", "Музыка", "Картинки", "Фотокамера", "Скриншоты"]
         for folder_name in yandex_default_folders:
             folder_path = os.path.join(sync_folder, folder_name)
             if not os.path.exists(folder_path):

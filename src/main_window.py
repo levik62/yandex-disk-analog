@@ -326,6 +326,8 @@ class MainWindow(QMainWindow):
         self._user_info: Optional[UserInfo] = None
         self._history_back: List[str] = []
         self._history_forward: List[str] = []
+        self._displayed_tiles_limit = 200
+        self._loaded_items: List[FileItem] = []
 
         self._setup_window()
         self._build_ui()
@@ -350,6 +352,63 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(icon_pix))
 
     def _build_ui(self) -> None:
+        # ── Главное меню (в стиле Яндекс.Диска) ────────────────────────
+        menu_bar = self.menuBar()
+        
+        # 1. Файл
+        file_menu = menu_bar.addMenu('Файл')
+        
+        open_folder_act = QAction('Открыть папку синхронизации', self)
+        open_folder_act.triggered.connect(self._on_open_sync_folder)
+        file_menu.addAction(open_folder_act)
+        
+        file_menu.addSeparator()
+        
+        logout_act = QAction('Выйти из аккаунта Google...', self)
+        logout_act.triggered.connect(self._on_logout)
+        file_menu.addAction(logout_act)
+        
+        exit_act = QAction('Выход', self)
+        exit_act.triggered.connect(self.close)
+        file_menu.addAction(exit_act)
+        
+        # 2. Правка
+        edit_menu = menu_bar.addMenu('Правка')
+        settings_act = QAction('Настройки', self)
+        settings_act.triggered.connect(lambda: self.open_settings_requested.emit())
+        edit_menu.addAction(settings_act)
+        
+        # 3. Вид
+        view_menu_bar = menu_bar.addMenu('Вид')
+        
+        table_act = QAction('Таблица', self)
+        table_act.triggered.connect(lambda: self._set_view_mode('list'))
+        view_menu_bar.addAction(table_act)
+        
+        normal_act = QAction('Обычные значки', self)
+        normal_act.triggered.connect(lambda: self._set_view_mode('tiles_normal'))
+        view_menu_bar.addAction(normal_act)
+        
+        large_act = QAction('Крупные значки', self)
+        large_act.triggered.connect(lambda: self._set_view_mode('tiles_large'))
+        view_menu_bar.addAction(large_act)
+        
+        huge_act = QAction('Огромные значки', self)
+        huge_act.triggered.connect(lambda: self._set_view_mode('tiles_huge'))
+        view_menu_bar.addAction(huge_act)
+        
+        view_menu_bar.addSeparator()
+        
+        refresh_act = QAction('Обновить', self)
+        refresh_act.triggered.connect(self.refresh)
+        view_menu_bar.addAction(refresh_act)
+        
+        # 4. Справка
+        help_menu = menu_bar.addMenu('Справка')
+        about_act = QAction('О программе', self)
+        about_act.triggered.connect(self._on_about)
+        help_menu.addAction(about_act)
+
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
@@ -828,6 +887,8 @@ class MainWindow(QMainWindow):
                     QProgressBar {{ background: #313244; border-radius: 3px; border: none; }}
                     QProgressBar::chunk {{ background: {chunk_color}; border-radius: 3px; }}
                 ''')
+                # Обновляем дерево папок, чтобы показать почту пользователя на корневой папке
+                self._populate_folder_tree()
         except Exception as e:
             logger.error('Ошибка загрузки информации о пользователе: %s', e)
             self._name_label.setText('Не подключено')
@@ -897,17 +958,38 @@ class MainWindow(QMainWindow):
     def _populate_folder_tree(self) -> None:
         self._folder_tree.clear()
 
+        # Цвет папок по умолчанию в зависимости от темы
+        quick_color = '#ffcc00' if self._config.theme != 'dark' else '#f9e2af'
+
         # 1. Быстрый доступ
         quick_item = QTreeWidgetItem(self._folder_tree, ['Быстрый доступ'])
         quick_item.setData(0, Qt.ItemDataRole.UserRole, '__quick_access__')
-        quick_color = '#ffcc00' if self._config.theme != 'dark' else '#f9e2af'
         quick_item.setIcon(0, self._make_folder_icon(quick_color, 'star'))
+        quick_item.setExpanded(True)
+
+        # Дочерние элементы быстрого доступа (как в Яндекс.Диске)
+        quick_subfolders = [
+            ('Скриншоты', 'Скриншоты', 'screenshots'),
+            ('Загрузки', 'Загрузки', 'downloads'),
+            ('Музыка', 'Музыка', 'music'),
+            ('Картинки', 'Картинки', 'pictures'),
+            ('Фотокамера', 'Фотокамера', 'camera')
+        ]
+        for name, rel_path, icon_type in quick_subfolders:
+            sub_item = QTreeWidgetItem(quick_item, [name])
+            sub_item.setData(0, Qt.ItemDataRole.UserRole, rel_path)
+            sub_item.setIcon(0, self._make_folder_icon(quick_color, icon_type))
 
         # 2. Google Drive (корень)
         sync_folder = self._config.sync_folder
         if not os.path.isdir(sync_folder):
             return
-        root_item = QTreeWidgetItem(self._folder_tree, ['Google Drive'])
+            
+        root_label = 'Google Drive'
+        if self._user_info and self._user_info.email:
+            root_label = f'Google Drive - {self._user_info.email}'
+            
+        root_item = QTreeWidgetItem(self._folder_tree, [root_label])
         root_item.setData(0, Qt.ItemDataRole.UserRole, '')
         root_item.setExpanded(True)
 
@@ -1117,7 +1199,10 @@ class MainWindow(QMainWindow):
         if self._current_path != '__quick_access__':
             items = self._sort_items(items)
 
-        if self._config.view_mode == 'tiles':
+        self._displayed_tiles_limit = 200
+        self._loaded_items = items
+
+        if self._config.view_mode.startswith('tiles'):
             self._populate_tiles(items)
         else:
             self._populate_table(items)
@@ -1166,18 +1251,90 @@ class MainWindow(QMainWindow):
         layout = FlowLayout(container, 12, 10, 10)
 
         tile_size = 'large'
+        card_w, card_h = 150, 160
         if self._config.view_mode == 'tiles_normal':
             tile_size = 'normal'
+            card_w, card_h = 110, 120
         elif self._config.view_mode == 'tiles_huge':
             tile_size = 'huge'
+            card_w, card_h = 200, 210
 
-        for fi in items:
+        # Отображаем только до лимита
+        items_to_show = items[:self._displayed_tiles_limit]
+        for fi in items_to_show:
             card = FileCard(fi, self._config.sync_folder, size_mode=tile_size)
             card.double_clicked.connect(self._on_file_activated)
             card.context_menu_requested.connect(self._on_card_context_menu)
             layout.addWidget(card)
             self._file_cards.append(card)
+
+        # Если файлов больше, чем лимит, добавляем плитку-кнопку "Показать еще"
+        if len(items) > self._displayed_tiles_limit:
+            from PyQt6.QtWidgets import QPushButton
+            remaining = len(items) - self._displayed_tiles_limit
+            load_more_btn = QPushButton(f"+\n\nПоказать ещё\n(осталось {remaining})")
+            load_more_btn.setFixedSize(card_w, card_h)
+            load_more_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            
+            # Подбираем стили под тему
+            use_dark = (self._config.theme == 'dark')
+            if self._config.theme == 'system':
+                try:
+                    import winreg
+                    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize')
+                    value, _ = winreg.QueryValueEx(key, 'AppsUseLightTheme')
+                    use_dark = (value == 0)
+                    winreg.CloseKey(key)
+                except Exception:
+                    use_dark = True
+            
+            if use_dark:
+                btn_style = """
+                    QPushButton {
+                        background-color: #313244;
+                        color: #cdd6f4;
+                        border: 1px solid transparent;
+                        border-radius: 8px;
+                        font-family: 'Segoe UI';
+                        font-size: 9pt;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #45475a;
+                        border: 1px solid #585b70;
+                    }
+                    QPushButton:pressed {
+                        background-color: #585b70;
+                    }
+                """
+            else:
+                btn_style = """
+                    QPushButton {
+                        background-color: #ffffff;
+                        color: #2c2d30;
+                        border: 1px solid #dcdde2;
+                        border-radius: 8px;
+                        font-family: 'Segoe UI';
+                        font-size: 9pt;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #f4f5f6;
+                        border: 1px solid #ccd0da;
+                    }
+                    QPushButton:pressed {
+                        background-color: #e6e8eb;
+                    }
+                """
+            load_more_btn.setStyleSheet(btn_style)
+            load_more_btn.clicked.connect(self._on_load_more_tiles)
+            layout.addWidget(load_more_btn)
+
         self._tiles_scroll.setWidget(container)
+
+    def _on_load_more_tiles(self) -> None:
+        self._displayed_tiles_limit += 200
+        self._populate_tiles(self._loaded_items)
 
     def _populate_table(self, items: List[FileItem]) -> None:
         self._table.setRowCount(len(items))
@@ -1701,3 +1858,20 @@ class MainWindow(QMainWindow):
         pct = (used / total * 100) if total > 0 else 0
         self._storage_bar.setValue(int(pct))
         self._storage_text.setText(f'{used_gb:.1f} ГБ из {total_gb:.1f} ГБ')
+
+    def _on_open_sync_folder(self) -> None:
+        try:
+            import os
+            os.startfile(self._config.sync_folder)
+        except Exception as e:
+            logger.error("Не удалось открыть папку синхронизации: %s", e)
+
+    def _on_about(self) -> None:
+        QMessageBox.information(
+            self,
+            'О программе',
+            'Google Drive Sync\n\n'
+            'Аналог Яндекс.Диска на базе облачного хранилища Google Drive.\n'
+            'Разработано для двусторонней синхронизации файлов и скриншотов.\n\n'
+            'Версия 1.0.0'
+        )

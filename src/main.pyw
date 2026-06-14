@@ -806,8 +806,8 @@ def main() -> int:
     sync_engine.status_changed.connect(tray.update_status)
 
     # 15. Запуск подсистем
-    # sync_engine.start()  # Отключено автоматическое включение при старте
-    logger.info("Движок синхронизации инициализирован в режиме ожидания")
+    sync_engine.start()
+    logger.info("Движок синхронизации запущен автоматически на старте")
 
     if config.hotkeys_enabled:
         hotkey_manager.start()

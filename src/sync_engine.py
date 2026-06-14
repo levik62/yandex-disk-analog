@@ -468,14 +468,16 @@ class SyncEngine(QObject):
             except Exception as e:
                 logger.error("Не удалось создать локальную папку синхронизации: %s", e)
 
-        # Убедиться, что локальная папка Скриншоты существует
-        screenshots_folder = os.path.join(sync_folder, "Скриншоты")
-        if not os.path.exists(screenshots_folder):
-            try:
-                os.makedirs(screenshots_folder, exist_ok=True)
-                logger.info("Создана локальная папка для скриншотов: %s", screenshots_folder)
-            except Exception as e:
-                logger.error("Не удалось создать локальную папку для скриншотов: %s", e)
+        # Создаём стандартные папки Яндекс.Диска (кроме Заметок и Телемоста)
+        yandex_default_folders = ["Документы", "Загрузки", "Музыка", "картинки", "Фотокамера", "Скриншоты"]
+        for folder_name in yandex_default_folders:
+            folder_path = os.path.join(sync_folder, folder_name)
+            if not os.path.exists(folder_path):
+                try:
+                    os.makedirs(folder_path, exist_ok=True)
+                    logger.info("Создана стандартная папка: %s", folder_path)
+                except Exception as e:
+                    logger.error("Не удалось создать стандартную папку %s: %s", folder_name, e)
 
         try:
             # Убедиться, что корневая папка в Drive существует
